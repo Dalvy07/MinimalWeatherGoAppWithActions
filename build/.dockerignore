@@ -1,0 +1,20 @@
+# Git files
+.git/
+.gitignore
+.gitattributes
+
+# CI/CD files (не нужны в образе)
+.github/
+
+# Build files (не нужны в образе)  
+build/
+
+# Documentation
+README.md
+*.md
+
+# Secrets (должны передаваться через Docker secrets)
+api_key.txt
+.env
+*.key
+*.pem
