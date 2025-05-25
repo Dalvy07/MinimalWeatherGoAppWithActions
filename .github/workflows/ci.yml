@@ -46,12 +46,10 @@ jobs:
         with:
           images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
           tags: |
+            # Тег latest только для main ветки
             type=raw,value=latest,enable={{is_default_branch}}
-            type=sha,prefix={{branch}}-,format=short,enable={{github.event_name == 'push'}}
-            type=sha,prefix=pr-{{github.event.pull_request.number}}-,format=short,enable={{github.event_name == 'pull_request'}}
-            # type=sha,format=short
-            # type=ref,event=branch,enable={{!is_default_branch}}
-            # type=ref,event=pr
+            # Короткий хеш коммита для всех событий
+            type=sha,format=short
           labels: |
             org.opencontainers.image.title=Weather App
             org.opencontainers.image.description=A minimalistic weather application
