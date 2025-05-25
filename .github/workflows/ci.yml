@@ -48,7 +48,7 @@ jobs:
           tags: |
             type=raw,value=latest,enable={{is_default_branch}}
             type=sha,prefix={{branch}}-,format=short,enable={{github.event_name == 'push'}}
-            type=sha,prefix=pr-{{pull_request.number}}-,format=short,enable={{github.event_name == 'pull_request'}}
+            type=sha,prefix=pr-{{github.event.pull_request.number}}-,format=short,enable={{github.event_name == 'pull_request'}}
             # type=sha,format=short
             # type=ref,event=branch,enable={{!is_default_branch}}
             # type=ref,event=pr
