@@ -68,11 +68,12 @@ jobs:
             api_key=${{ secrets.WEATHER_API_KEY }}
           tags: test-image:latest
           labels: ${{ steps.meta.outputs.labels }}
-          cache-from: |
-            type=registry,ref=${{ env.DOCKERHUB_CACHE_IMAGE }}:latest
+          # cache-from: |
+          #   type=registry,ref=${{ env.DOCKERHUB_CACHE_IMAGE }}:latest
           load: true  # Загружаем в локальный Docker daemon
           sbom: true
           provenance: mode=max
+          push: false
 
       - name: Run Trivy vulnerability scanner
         id: trivy-scan
@@ -140,10 +141,10 @@ jobs:
             api_key=${{ secrets.WEATHER_API_KEY }}
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
-          cache-from: |
-            type=registry,ref=${{ env.DOCKERHUB_CACHE_IMAGE }}:latest
-          cache-to: |
-            type=registry,ref=${{ env.DOCKERHUB_CACHE_IMAGE }}:latest,mode=max
+          # cache-from: |
+          #   type=registry,ref=${{ env.DOCKERHUB_CACHE_IMAGE }}:latest
+          # cache-to: |
+          #   type=registry,ref=${{ env.DOCKERHUB_CACHE_IMAGE }}:latest,mode=max
           push: true  # Публикуем напрямую в registry
           sbom: true
           provenance: mode=max
