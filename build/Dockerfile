@@ -15,7 +15,7 @@ ENV CGO_ENABLED=0
 
 # ===== DEPENDENCIES LAYER (cached when go.mod/go.sum unchanged) =====
 # Copy Go module files first for better Docker layer caching
-COPY src/go.mod src/go.sum ./
+COPY src/go.mod ./
 
 # Download dependencies (this layer will be cached if go.mod/go.sum don't change)
 RUN go mod download && go mod verify
