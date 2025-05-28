@@ -216,10 +216,18 @@ jobs:
             type=registry,ref=${{ env.DOCKERHUB_CACHE_IMAGE }}:latest,mode=max
           push: true
       
+      - name: Extract main image tag for scanning
+        id: scan-tag
+        run: |
+          # Получаем первый тег из сгенерированных метаданных
+          MAIN_TAG=$(echo '${{ steps.meta.outputs.tags }}' | head -n1)
+          echo "tag=${MAIN_TAG}" >> $GITHUB_OUTPUT
+          echo "Scanning image: ${MAIN_TAG}"
+        
       - name: Run Trivy scan for critical vulnerabilities
         uses: aquasecurity/trivy-action@master
         with:
-          image-ref: ${{ steps.meta.outputs.tags[1] }}
+          image-ref: ${{ steps.scan-tag.outputs.tag }}
           format: 'table'
           severity: 'CRITICAL,HIGH'
           exit-code: '1' # Прерывает выполнение при обнаружении критических уязвимостей
