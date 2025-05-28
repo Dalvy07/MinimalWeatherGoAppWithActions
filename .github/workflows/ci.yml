@@ -1,100 +1,9 @@
-# name: Build and Push Docker Image
-
-# on:
-#   push:
-#     branches: [ main ]
-#   workflow_dispatch:
-
-# env:
-#   REGISTRY: ghcr.io
-#   IMAGE_NAME: ${{ github.repository }}
-#   DOCKERHUB_CACHE_IMAGE: dalvy07/weather-app-cache
-
-# jobs:
-#   build:
-#     runs-on: ubuntu-latest
-#     permissions:
-#       contents: read
-#       packages: write
-#       security-events: write
-
-#     steps:
-#       - name: Checkout repository
-#         uses: actions/checkout@v4
-
-#       - name: Setup QEMU for multi-platform builds
-#         uses: docker/setup-qemu-action@v3
-
-#       - name: Set up Docker Buildx
-#         uses: docker/setup-buildx-action@v3
-
-#       - name: Log in to Docker Hub (for cache)
-#         uses: docker/login-action@v3
-#         with:
-#           username: ${{ secrets.DOCKERHUB_USERNAME }}
-#           password: ${{ secrets.DOCKERHUB_TOKEN }}
-
-#       - name: Log in to GitHub Container Registry
-#         uses: docker/login-action@v3
-#         with:
-#           registry: ${{ env.REGISTRY }}
-#           username: ${{ github.actor }}
-#           password: ${{ secrets.GITHUB_TOKEN }}
-
-#       - name: Extract metadata
-#         id: meta
-#         uses: docker/metadata-action@v5
-#         with:
-#           images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
-#           tags: |
-#             type=raw,value=latest,enable={{is_default_branch}}
-#             type=sha,format=long
-
-#       - name: Build and push Docker image
-#         uses: docker/build-push-action@v5
-#         with:
-#           context: .
-#           file: build/Dockerfile
-#           platforms: linux/amd64,linux/arm64
-#           secrets: |
-#             api_key=${{ secrets.WEATHER_API_KEY }}
-#           tags: ${{ steps.meta.outputs.tags }}
-#           labels: ${{ steps.meta.outputs.labels }}
-#           cache-from: |
-#             type=registry,ref=${{ env.DOCKERHUB_CACHE_IMAGE }}:latest
-#           cache-to: |
-#             type=registry,ref=${{ env.DOCKERHUB_CACHE_IMAGE }}:latest,mode=max
-#           push: true
-      
-#       - name: Extract main image tag for scanning
-#         id: scan-tag
-#         run: |
-#           # Получаем первый тег из сгенерированных метаданных
-#           MAIN_TAG=$(echo '${{ steps.meta.outputs.tags }}' | head -n1)
-#           echo "tag=${MAIN_TAG}" >> $GITHUB_OUTPUT
-#           echo "Scanning image: ${MAIN_TAG}"
-        
-#       - name: Run Trivy scan for critical vulnerabilities
-#         uses: aquasecurity/trivy-action@master
-#         with:
-#           image-ref: ${{ steps.scan-tag.outputs.tag }}
-#           format: 'sarif'
-#           output: 'trivy-results.sarif'
-#           severity: 'CRITICAL,HIGH'
-#           exit-code: '1' # Прерывает выполнение при обнаружении критических уязвимостей
-
-#       - name: Upload Trivy scan results to GitHub Security
-#         uses: github/codeql-action/upload-sarif@v3
-#         if: always()
-#         with:
-#           sarif_file: 'trivy-results.sarif'
-
-
-
 name: Build and Push Docker Image
 
 on:
   push:
+    branches: [ main ]
+  pull_request:
     branches: [ main ]
   workflow_dispatch:
 
@@ -143,21 +52,21 @@ jobs:
             type=raw,value=latest,enable={{is_default_branch}}
             type=sha,format=long
 
-      # Сборка только для amd64 для быстрого тестирования
+      # Build only for amd64 for quick testing
       - name: Build test image for security scanning
         uses: docker/build-push-action@v5
         with:
           context: .
           file: build/Dockerfile
-          platforms: linux/amd64  # Только одна платформа для быстрого сканирования
+          platforms: linux/amd64  # Only 1 platform for quick test
           secrets: |
             api_key=${{ secrets.WEATHER_API_KEY }}
           tags: test-image:latest
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: |
             type=registry,ref=${{ env.DOCKERHUB_CACHE_IMAGE }}:latest
-          load: true  # Загружаем в локальный Docker daemon
-          push: false  # НЕ публикуем пока не проверим безопасность
+          load: true  # Load image into local Docker daemon for scanning
+          push: false  # Don't push test image to registry
 
       - name: Run Trivy vulnerability scanner
         id: trivy-scan
@@ -167,7 +76,7 @@ jobs:
           format: 'sarif'
           output: 'trivy-results.sarif'
           severity: 'CRITICAL,HIGH'
-          exit-code: '1'  # Прерываем для анализа результатов
+          exit-code: '1'  # Fail the job if vulnerabilities are found
 
       - name: Upload Trivy scan results to GitHub Security
         uses: github/codeql-action/upload-sarif@v3
@@ -212,7 +121,7 @@ jobs:
         with:
           context: .
           file: build/Dockerfile
-          platforms: linux/amd64,linux/arm64  # Полная мультиплатформенная сборка
+          platforms: linux/amd64,linux/arm64  # Build for both amd64 and arm64
           secrets: |
             api_key=${{ secrets.WEATHER_API_KEY }}
           tags: ${{ steps.meta.outputs.tags }}
