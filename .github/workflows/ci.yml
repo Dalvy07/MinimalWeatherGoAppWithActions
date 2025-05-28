@@ -1,11 +1,9 @@
 # name: Build and Push Docker Image
 
 # on:
-#     push:
-#         branches: [ main ]
-#     pull_request:
-#         branches: [ main ]
-#     workflow_dispatch:
+#   push:
+#     branches: [ main ]
+#   workflow_dispatch:
 
 # env:
 #   REGISTRY: ghcr.io
@@ -13,7 +11,7 @@
 #   DOCKERHUB_CACHE_IMAGE: dalvy07/weather-app-cache
 
 # jobs:
-#   build-and-test:
+#   build:
 #     runs-on: ubuntu-latest
 #     permissions:
 #       contents: read
@@ -50,40 +48,40 @@
 #           images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
 #           tags: |
 #             type=raw,value=latest,enable={{is_default_branch}}
-#             type=sha,format=short
-#           labels: |
-#             org.opencontainers.image.title=Weather App
-#             org.opencontainers.image.description=A minimalistic weather application
-#             org.opencontainers.image.authors=Vladyslav Liulka <vladlulka3@gmail.com>
+#             type=sha,format=long
 
-#       # Шаг 1: Сборка для тестирования (только amd64, docker format)
-#       - name: Build Docker image for testing
-#         id: build-test
+#       - name: Build and push Docker image
 #         uses: docker/build-push-action@v5
 #         with:
 #           context: .
 #           file: build/Dockerfile
-#           platforms: linux/amd64  # Только одна платформа для тестирования
+#           platforms: linux/amd64,linux/arm64
 #           secrets: |
 #             api_key=${{ secrets.WEATHER_API_KEY }}
-#           tags: test-image:latest
+#           tags: ${{ steps.meta.outputs.tags }}
 #           labels: ${{ steps.meta.outputs.labels }}
-#           # cache-from: |
-#           #   type=registry,ref=${{ env.DOCKERHUB_CACHE_IMAGE }}:latest
-#           load: true  # Загружаем в локальный Docker daemon
-#           sbom: true
-#           provenance: mode=max
-#           push: false
-
-#       - name: Run Trivy vulnerability scanner
-#         id: trivy-scan
+#           cache-from: |
+#             type=registry,ref=${{ env.DOCKERHUB_CACHE_IMAGE }}:latest
+#           cache-to: |
+#             type=registry,ref=${{ env.DOCKERHUB_CACHE_IMAGE }}:latest,mode=max
+#           push: true
+      
+#       - name: Extract main image tag for scanning
+#         id: scan-tag
+#         run: |
+#           # Получаем первый тег из сгенерированных метаданных
+#           MAIN_TAG=$(echo '${{ steps.meta.outputs.tags }}' | head -n1)
+#           echo "tag=${MAIN_TAG}" >> $GITHUB_OUTPUT
+#           echo "Scanning image: ${MAIN_TAG}"
+        
+#       - name: Run Trivy scan for critical vulnerabilities
 #         uses: aquasecurity/trivy-action@master
 #         with:
-#           image-ref: 'test-image:latest'
+#           image-ref: ${{ steps.scan-tag.outputs.tag }}
 #           format: 'sarif'
 #           output: 'trivy-results.sarif'
 #           severity: 'CRITICAL,HIGH'
-#           exit-code: '0'
+#           exit-code: '1' # Прерывает выполнение при обнаружении критических уязвимостей
 
 #       - name: Upload Trivy scan results to GitHub Security
 #         uses: github/codeql-action/upload-sarif@v3
@@ -91,63 +89,7 @@
 #         with:
 #           sarif_file: 'trivy-results.sarif'
 
-#       - name: Analyze vulnerability scan results
-#         id: vuln-check
-#         run: |
-#           echo "Analyzing Trivy vulnerability scan results..."
-          
-#           if [ -f "trivy-results.sarif" ]; then
-#             echo "Trivy SARIF file found, parsing results..."
-            
-#             total_vulnerabilities=$(jq '[.runs[].results[]] | length' trivy-results.sarif 2>/dev/null || echo "0")
-            
-#             echo "Critical/High vulnerabilities found: $total_vulnerabilities"
-#             echo "vulnerability_count=$total_vulnerabilities" >> $GITHUB_OUTPUT
-            
-#             if [ "$total_vulnerabilities" -gt 0 ]; then
-#               echo "SECURITY BLOCK: Critical or high severity vulnerabilities detected!"
-#               echo "Deployment will be blocked for security reasons"
-#               echo "Total vulnerabilities: $total_vulnerabilities"
-              
-#               echo "Sample vulnerabilities:"
-#               jq -r '.runs[].results[0:3][] | "- " + (.ruleId // "Unknown") + ": " + .message.text' trivy-results.sarif 2>/dev/null || echo "Could not parse vulnerability details"
-              
-#               echo "deployment_blocked=true" >> $GITHUB_OUTPUT
-#               exit 1
-#             else
-#               echo "SECURITY PASSED: No critical or high severity vulnerabilities found"
-#               echo "Image is safe for deployment"
-#               echo "deployment_blocked=false" >> $GITHUB_OUTPUT
-#             fi
-#           else
-#             echo "Trivy SARIF file not found - scan may have failed"
-#             echo "Proceeding with caution (scanner unavailable)"
-#             echo "deployment_blocked=false" >> $GITHUB_OUTPUT
-#           fi
 
-#       # Шаг 2: Финальная мультиплатформенная сборка и публикация
-#       - name: Build and push multi-platform Docker image
-#         if: |
-#           success() && 
-#           steps.vuln-check.outputs.deployment_blocked == 'false' &&
-#           github.event_name == 'push' &&
-#           github.ref == 'refs/heads/main'
-#         uses: docker/build-push-action@v5
-#         with:
-#           context: .
-#           file: build/Dockerfile
-#           platforms: linux/amd64,linux/arm64  # Мультиплатформенная сборка
-#           secrets: |
-#             api_key=${{ secrets.WEATHER_API_KEY }}
-#           tags: ${{ steps.meta.outputs.tags }}
-#           labels: ${{ steps.meta.outputs.labels }}
-#           # cache-from: |
-#           #   type=registry,ref=${{ env.DOCKERHUB_CACHE_IMAGE }}:latest
-#           # cache-to: |
-#           #   type=registry,ref=${{ env.DOCKERHUB_CACHE_IMAGE }}:latest,mode=max
-#           push: true  # Публикуем напрямую в registry
-#           sbom: true
-#           provenance: mode=max
 
 name: Build and Push Docker Image
 
@@ -162,7 +104,7 @@ env:
   DOCKERHUB_CACHE_IMAGE: dalvy07/weather-app-cache
 
 jobs:
-  build:
+  security-scan:
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -201,12 +143,76 @@ jobs:
             type=raw,value=latest,enable={{is_default_branch}}
             type=sha,format=long
 
-      - name: Build and push Docker image
+      # Сборка только для amd64 для быстрого тестирования
+      - name: Build test image for security scanning
         uses: docker/build-push-action@v5
         with:
           context: .
           file: build/Dockerfile
-          platforms: linux/amd64,linux/arm64
+          platforms: linux/amd64  # Только одна платформа для быстрого сканирования
+          secrets: |
+            api_key=${{ secrets.WEATHER_API_KEY }}
+          tags: test-image:latest
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: |
+            type=registry,ref=${{ env.DOCKERHUB_CACHE_IMAGE }}:latest
+          load: true  # Загружаем в локальный Docker daemon
+          push: false  # НЕ публикуем пока не проверим безопасность
+
+      - name: Run Trivy vulnerability scanner
+        id: trivy-scan
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: 'test-image:latest'
+          format: 'sarif'
+          output: 'trivy-results.sarif'
+          severity: 'CRITICAL,HIGH'
+          exit-code: '1'  # Прерываем для анализа результатов
+
+      - name: Upload Trivy scan results to GitHub Security
+        uses: github/codeql-action/upload-sarif@v3
+        if: always()
+        with:
+          sarif_file: 'trivy-results.sarif'
+
+      - name: Analyze vulnerability scan results
+        id: vuln-check
+        run: |
+          echo "Analyzing Trivy vulnerability scan results..."
+          
+          if [ -f "trivy-results.sarif" ]; then
+            echo "Trivy SARIF file found, parsing results..."
+            
+            total_vulnerabilities=$(jq '[.runs[].results[]] | length' trivy-results.sarif 2>/dev/null || echo "0")
+            
+            echo "Critical/High vulnerabilities found: $total_vulnerabilities"
+            echo "vulnerability_count=$total_vulnerabilities" >> $GITHUB_OUTPUT
+            
+            if [ "$total_vulnerabilities" -gt 0 ]; then
+              echo "SECURITY BLOCK: Critical or high severity vulnerabilities detected!"
+              echo "Deployment will be blocked for security reasons"
+              echo "Total vulnerabilities: $total_vulnerabilities"
+
+              echo "deployment_allowed=false" >> $GITHUB_OUTPUT
+            else
+              echo "SECURITY PASSED: No critical or high severity vulnerabilities found"
+              echo "Image is safe for deployment"
+
+              echo "deployment_allowed=true" >> $GITHUB_OUTPUT
+            fi
+          else
+            echo "Trivy SARIF file not found - scan may have failed"
+            echo "Blocking deployment due to scanner failure"
+            echo "deployment_allowed=false" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Build and push multi-platform Docker image
+        if: steps.vuln-check.outputs.deployment_allowed == 'true'
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: build/Dockerfile
+          platforms: linux/amd64,linux/arm64  # Полная мультиплатформенная сборка
           secrets: |
             api_key=${{ secrets.WEATHER_API_KEY }}
           tags: ${{ steps.meta.outputs.tags }}
@@ -216,27 +222,5 @@ jobs:
           cache-to: |
             type=registry,ref=${{ env.DOCKERHUB_CACHE_IMAGE }}:latest,mode=max
           push: true
-      
-      - name: Extract main image tag for scanning
-        id: scan-tag
-        run: |
-          # Получаем первый тег из сгенерированных метаданных
-          MAIN_TAG=$(echo '${{ steps.meta.outputs.tags }}' | head -n1)
-          echo "tag=${MAIN_TAG}" >> $GITHUB_OUTPUT
-          echo "Scanning image: ${MAIN_TAG}"
-        
-      - name: Run Trivy scan for critical vulnerabilities
-        uses: aquasecurity/trivy-action@master
-        with:
-          image-ref: ${{ steps.scan-tag.outputs.tag }}
-          format: 'sarif'
-          output: 'trivy-results.sarif'
-          severity: 'CRITICAL,HIGH'
-          exit-code: '1' # Прерывает выполнение при обнаружении критических уязвимостей
 
-      - name: Upload Trivy scan results to GitHub Security
-        uses: github/codeql-action/upload-sarif@v3
-        if: always()
-        with:
-          sarif_file: 'trivy-results.sarif'
 
